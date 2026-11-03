@@ -18,27 +18,50 @@ app.use(express.json());
 
 // TASK 1: Register a user (TODO)
 app.post("/auth/register", async (req, res) => {
-  // 1. Read email and password from req.body.
-  // 2. Validate: email is a string containing "@"; password is a string
-  //    with at least 8 characters. Return 400 for invalid input.
-  // 3. Check existing email using prisma.user.findUnique(). Return 409 if found.
-  // 4. Hash password using bcrypt.hash(password, 10).
-  // 5. Create the user using prisma.user.create().
-  // 6. Return 201 with only { id, email }, never password or password hash.
-  return res.status(501).json({ message: "TODO: Implement registration" });
+  const { email, password } = req.body ?? {};
+
+  if (
+    typeof email !== "string" ||
+    !email.includes("@") ||
+    typeof password !== "string" ||
+    password.length < 8
+  ) {
+    return res.status(400).json({ message: "Invalid email or password" });
+  }
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    return res.status(409).json({ message: "Email is already registered" });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: { email, password: hashedPassword },
+    select: { id: true, email: true },
+  });
+
+  return res.status(201).json(user);
 });
 
 // TASK 2: Log in and issue a JWT (TODO)
 app.post("/auth/login", async (req, res) => {
-  // 1. Read email and password; return 400 if either is not a string.
-  // 2. Look up user using prisma.user.findUnique().
-  // 3. Check the password with bcrypt.compare(); return 401 if incorrect.
-  // 4. Sign a token with jwt.sign():
-  //    Payload: { userId: user.id }
-  //    Secret: process.env.JWT_SECRET
-  //    Options: { expiresIn: "15m", algorithm: "HS256" }
-  // 5. Return 200 with { accessToken }.
-  return res.status(501).json({ message: "TODO: Implement login" });
+  const { email, password } = req.body ?? {};
+  if (typeof email !== "string" || typeof password !== "string") {
+    return res.status(400).json({ message: "Email and password must be strings" });
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ message: "Invalid email or password" });
+  }
+
+  const accessToken = jwt.sign(
+    { userId: user.id },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m", algorithm: "HS256" },
+  );
+
+  return res.status(200).json({ accessToken });
 });
 
 // PUBLIC ROUTES: Already implemented; do not modify.
